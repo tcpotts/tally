@@ -367,6 +367,87 @@
     padding:60px 20px; font-size:14px;
   }
 
+  /* Tabs */
+  .tab-bar{
+    margin:14px 20px 0;
+    display:flex;
+    gap:4px;
+    padding:4px;
+    background:var(--surface);
+    border:1px solid var(--hairline);
+    border-radius:12px;
+  }
+  .tab-btn{
+    flex:1;
+    background:none;
+    border:none;
+    color:var(--muted);
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:13.5px;
+    padding:9px 0;
+    border-radius:9px;
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease;
+  }
+  .tab-btn.active{
+    background:var(--surface-raised);
+    color:var(--gold);
+  }
+
+  /* Charts */
+  .charts-wrap{
+    padding:16px 20px 30px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .chart-card{
+    background:var(--surface);
+    border:1px solid var(--hairline);
+    border-radius:16px;
+    padding:16px 16px 10px;
+  }
+  .chart-header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:2px;
+  }
+  .chart-title{
+    font-family:var(--font-display);
+    font-size:15px;
+    font-weight:600;
+    color:var(--ink);
+  }
+  .chart-range{
+    font-size:11.5px;
+    color:var(--muted);
+    font-family:var(--font-mono);
+  }
+  .chart-svg{
+    width:100%;
+    height:auto;
+    display:block;
+    margin-top:6px;
+  }
+  .chart-legend{
+    display:flex;
+    gap:14px;
+    margin-top:4px;
+    font-size:11.5px;
+    color:var(--muted);
+  }
+  .chart-legend span{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+  }
+  .legend-dot{
+    width:8px; height:8px; border-radius:50%;
+    display:inline-block;
+  }
+
   .install-banner{
     display:none;
     margin:14px 20px 0;
@@ -403,6 +484,11 @@
     </button>
   </div>
 
+  <div class="tab-bar">
+    <button class="tab-btn" id="tabLedgerBtn">Ledger</button>
+    <button class="tab-btn" id="tabChartsBtn">Charts</button>
+  </div>
+
   <div class="install-banner" id="installBanner">
     <span>Install Tally on your home screen for the full app experience.</span>
     <button id="installBtn">Install</button>
@@ -431,6 +517,7 @@
   const STORAGE_KEY = 'tally-state';
   const content = document.getElementById('content');
   let state = null;
+  let activeTab = 'ledger';
 
   // ---------- Storage (localStorage, persists on-device) ----------
   const localStore = {
@@ -545,6 +632,18 @@
   }
 
   function render(){
+    const ledgerTabBtn = document.getElementById('tabLedgerBtn');
+    const chartsTabBtn = document.getElementById('tabChartsBtn');
+    if(ledgerTabBtn) ledgerTabBtn.classList.toggle('active', activeTab === 'ledger');
+    if(chartsTabBtn) chartsTabBtn.classList.toggle('active', activeTab === 'charts');
+    if(activeTab === 'charts'){
+      renderChartsView();
+    } else {
+      renderLedgerView();
+    }
+  }
+
+  function renderLedgerView(){
     const balance = round2(state.balance);
     const groups = groupByDate(state.entries);
 
@@ -610,6 +709,104 @@
     });
   }
 
+  // ---------- Charts ----------
+  function fmtShortDate(key){
+    const d = dateKeyToDate(key);
+    return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  }
+
+  function buildDailySeries(){
+    const byDate = new Map();
+    for(const e of state.entries){
+      if(!byDate.has(e.date)) byDate.set(e.date, { spend:0, lastRunning:e.running });
+      const rec = byDate.get(e.date);
+      if(e.type === 'purchase') rec.spend = round2(rec.spend + e.amount);
+      rec.lastRunning = e.running;
+    }
+    const dates = Array.from(byDate.keys()).sort();
+    return dates.map(d => ({ date:d, spend: byDate.get(d).spend, balance: byDate.get(d).lastRunning }));
+  }
+
+  function buildLineChart(series, valueKey, color){
+    const W = 300, H = 150, padL = 42, padR = 10, padT = 14, padB = 22;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const n = series.length;
+    const values = series.map(p => p[valueKey]);
+    let minV = Math.min(...values), maxV = Math.max(...values);
+    if(minV === maxV){ minV -= 1; maxV += 1; }
+    const pad = (maxV - minV) * 0.12 || 1;
+    minV -= pad; maxV += pad;
+
+    const xFor = i => n <= 1 ? padL + innerW / 2 : padL + (innerW * i / (n - 1));
+    const yFor = v => padT + innerH - ((v - minV) / (maxV - minV)) * innerH;
+    const points = series.map((p, i) => [xFor(i), yFor(p[valueKey])]);
+
+    const pathD = points.map((pt, i) => (i === 0 ? 'M' : 'L') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1)).join(' ');
+    const baselineY = (padT + innerH).toFixed(1);
+    const areaD = `${pathD} L${points[points.length - 1][0].toFixed(1)},${baselineY} L${points[0][0].toFixed(1)},${baselineY} Z`;
+
+    const gridVals = [minV, (minV + maxV) / 2, maxV];
+    const gridLines = gridVals.map(v => {
+      const y = yFor(v).toFixed(1);
+      return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--hairline)" stroke-width="1" stroke-dasharray="2,3"/>
+        <text x="${padL - 6}" y="${(parseFloat(y) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">${fmtMoney(v)}</text>`;
+    }).join('');
+
+    const dots = points.length <= 25
+      ? points.map(pt => `<circle cx="${pt[0].toFixed(1)}" cy="${pt[1].toFixed(1)}" r="2.4" fill="${color}"/>`).join('')
+      : '';
+
+    const firstLabel = fmtShortDate(series[0].date);
+    const lastLabel = n > 1 ? fmtShortDate(series[n - 1].date) : '';
+
+    return `
+      <svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Line chart">
+        ${gridLines}
+        <path d="${areaD}" fill="${color}" opacity="0.1" stroke="none"/>
+        <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        ${dots}
+        <text x="${padL}" y="${H - 4}" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">${firstLabel}</text>
+        <text x="${W - padR}" y="${H - 4}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">${lastLabel}</text>
+      </svg>`;
+  }
+
+  function renderChartsView(){
+    const series = buildDailySeries();
+
+    if(series.length === 0){
+      content.innerHTML = `
+        <div class="charts-wrap">
+          <div class="empty-state"><div class="glyph">—</div>Log a few days of activity to see your charts.</div>
+        </div>`;
+      return;
+    }
+
+    const trimmed = series.slice(-30);
+    const rangeLabel = trimmed.length + (trimmed.length === 1 ? ' day' : ' days');
+    const balanceChart = buildLineChart(trimmed, 'balance', 'var(--gold)');
+    const spendChart = buildLineChart(trimmed, 'spend', 'var(--danger)');
+
+    content.innerHTML = `
+      <div class="charts-wrap">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Balance over time</div>
+            <div class="chart-range">${rangeLabel}</div>
+          </div>
+          ${balanceChart}
+          <div class="chart-legend"><span><span class="legend-dot" style="background:var(--gold)"></span>End-of-day balance</span></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Daily spending</div>
+            <div class="chart-range">${rangeLabel}</div>
+          </div>
+          ${spendChart}
+          <div class="chart-legend"><span><span class="legend-dot" style="background:var(--danger)"></span>Purchases per day</span></div>
+        </div>
+      </div>`;
+  }
+
   function escapeHtml(str){
     const div = document.createElement('div');
     div.textContent = str;
@@ -656,6 +853,18 @@
     }
     state.balance = running;
   }
+
+  // Tab bar
+  document.getElementById('tabLedgerBtn').addEventListener('click', () => {
+    if(activeTab === 'ledger') return;
+    activeTab = 'ledger';
+    render();
+  });
+  document.getElementById('tabChartsBtn').addEventListener('click', () => {
+    if(activeTab === 'charts') return;
+    activeTab = 'charts';
+    render();
+  });
 
   // Settings modal
   const overlay = document.getElementById('settingsOverlay');
