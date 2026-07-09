@@ -766,6 +766,7 @@
     if(minV === maxV){ minV -= 1; maxV += 1; }
     const pad = (maxV - minV) * 0.12 || 1;
     minV -= pad; maxV += pad;
+    if(options.clampMinZero){ minV = Math.max(minV, 0); }
 
     const xFor = i => n <= 1 ? padL + innerW / 2 : padL + edgeInset + (plotW * i / (n - 1));
     const yFor = v => padT + innerH - ((v - minV) / (maxV - minV)) * innerH;
@@ -835,7 +836,8 @@
 
     const balanceChart = buildLineChart(trimmed, 'balance', 'var(--gold)');
     const spendChart = buildLineChart(trimmed, 'spend', 'var(--danger)', {
-      referenceLine: { value: state.dailyAmount, label: `Budget ${fmtMoney(state.dailyAmount)}` }
+      referenceLine: { value: state.dailyAmount, label: `Budget ${fmtMoney(state.dailyAmount)}` },
+      clampMinZero: true
     });
 
     content.innerHTML = `
