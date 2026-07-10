@@ -362,6 +362,25 @@
   }
   .modal{position:relative;}
 
+  .settings-divider{
+    height:1px;
+    background:var(--hairline);
+    margin:22px 0 18px;
+  }
+  .settings-note{
+    font-size:12.5px;
+    line-height:1.5;
+    color:var(--muted);
+    margin:0 0 16px;
+  }
+  .backup-status{
+    font-size:12px;
+    color:var(--gold);
+    margin-top:10px;
+    min-height:14px;
+  }
+  .backup-status.error{color:var(--danger);}
+
   .loading-msg{
     text-align:center; color:var(--muted);
     padding:60px 20px; font-size:14px;
@@ -519,6 +538,11 @@
     <button id="installBtn">Install</button>
   </div>
 
+  <div class="install-banner" id="backupBanner">
+    <span id="backupBannerText">Back up your data so it's never lost.</span>
+    <button id="backupBannerBtn">Back up</button>
+  </div>
+
   <div id="content">
     <div class="loading-msg">Opening the ledger…</div>
   </div>
@@ -534,6 +558,21 @@
       <button class="btn-secondary" id="resetBtn">Reset all data</button>
       <button class="btn-primary" id="saveSettingsBtn">Save</button>
     </div>
+
+    <div class="settings-divider"></div>
+
+    <h2>Backup &amp; restore</h2>
+    <p class="settings-note">
+      Your data lives only in this browser on this device — it can be lost if you clear site
+      data, switch browsers, or reinstall the app. Export a backup regularly and keep the file
+      somewhere safe.
+    </p>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="importBtn">Import backup</button>
+      <button class="btn-primary" id="exportBtn">Export backup</button>
+    </div>
+    <div class="backup-status" id="backupStatus"></div>
+    <input type="file" id="importFileInput" accept="application/json" style="display:none">
   </div>
 </div>
 
@@ -620,6 +659,7 @@
     }catch(e){
       console.error('Could not save', e);
     }
+    if(typeof updateBackupBanner === 'function'){ updateBackupBanner(); }
   }
 
   function applyDailyCredits(){
@@ -935,8 +975,20 @@
 
   // Settings modal
   const overlay = document.getElementById('settingsOverlay');
+  const LAST_BACKUP_KEY = 'tally-last-backup';
+  const backupStatus = document.getElementById('backupStatus');
+
+  function describeLastBackup(){
+    const raw = window.localStorage.getItem(LAST_BACKUP_KEY);
+    if(!raw) return 'No backup yet — export one to keep your data safe.';
+    const d = new Date(raw);
+    return 'Last backup: ' + d.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) + ' at ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+  }
+
   document.getElementById('settingsBtn').addEventListener('click', () => {
     document.getElementById('dailyAmountInput').value = state.dailyAmount;
+    backupStatus.textContent = describeLastBackup();
+    backupStatus.classList.remove('error');
     overlay.classList.add('open');
   });
   document.getElementById('closeSettings').addEventListener('click', () => overlay.classList.remove('open'));
@@ -951,7 +1003,7 @@
     overlay.classList.remove('open');
   });
   document.getElementById('resetBtn').addEventListener('click', () => {
-    if(confirm('Reset all budget data? This cannot be undone.')){
+    if(confirm('Reset all budget data? This cannot be undone. Export a backup first if you want to keep it.')){
       state = defaultState();
       persist();
       render();
@@ -959,7 +1011,106 @@
     }
   });
 
+  // ---------- Backup (export) ----------
+  function exportBackup(){
+    try{
+      const payload = {
+        app: 'tally',
+        exportedAt: new Date().toISOString(),
+        state
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = todayKey();
+      a.href = url;
+      a.download = `tally-backup-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      window.localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
+      backupStatus.textContent = 'Backup saved to your downloads.';
+      backupStatus.classList.remove('error');
+      updateBackupBanner();
+      return true;
+    }catch(e){
+      backupStatus.textContent = 'Could not create backup file.';
+      backupStatus.classList.add('error');
+      return false;
+    }
+  }
+  document.getElementById('exportBtn').addEventListener('click', exportBackup);
+
+  // ---------- Restore (import) ----------
+  const importFileInput = document.getElementById('importFileInput');
+  document.getElementById('importBtn').addEventListener('click', () => {
+    importFileInput.value = '';
+    importFileInput.click();
+  });
+  importFileInput.addEventListener('change', () => {
+    const file = importFileInput.files && importFileInput.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const parsed = JSON.parse(reader.result);
+        const incoming = parsed && parsed.state ? parsed.state : parsed; // support raw state or wrapped payload
+        if(!incoming || typeof incoming.dailyAmount !== 'number' || !Array.isArray(incoming.entries)){
+          throw new Error('Unrecognized backup format');
+        }
+        if(!confirm('Import this backup? It will replace all data currently in the app.')){
+          return;
+        }
+        state = incoming;
+        recomputeRunningBalances();
+        applyDailyCredits();
+        persist();
+        render();
+        backupStatus.textContent = 'Backup restored successfully.';
+        backupStatus.classList.remove('error');
+      }catch(e){
+        backupStatus.textContent = 'That file doesn\'t look like a valid Tally backup.';
+        backupStatus.classList.add('error');
+      }
+    };
+    reader.onerror = () => {
+      backupStatus.textContent = 'Could not read that file.';
+      backupStatus.classList.add('error');
+    };
+    reader.readAsText(file);
+  });
+
+  // ---------- Backup reminder banner ----------
+  const backupBanner = document.getElementById('backupBanner');
+  const backupBannerText = document.getElementById('backupBannerText');
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function updateBackupBanner(){
+    if(!state || state.entries.length < 3){
+      backupBanner.classList.remove('show');
+      return;
+    }
+    const raw = window.localStorage.getItem(LAST_BACKUP_KEY);
+    if(!raw){
+      backupBannerText.textContent = "You haven't backed up your data yet — export it so it's never lost.";
+      backupBanner.classList.add('show');
+      return;
+    }
+    const last = new Date(raw).getTime();
+    if(Date.now() - last > SEVEN_DAYS_MS){
+      backupBannerText.textContent = "It's been a while since your last backup — export a fresh copy.";
+      backupBanner.classList.add('show');
+    } else {
+      backupBanner.classList.remove('show');
+    }
+  }
+
+  document.getElementById('backupBannerBtn').addEventListener('click', exportBackup);
+
   loadState();
+  updateBackupBanner();
 
   // ---------- PWA install prompt ----------
   let deferredPrompt = null;
