@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tally — Daily Budget Ledger</title>
+
+<!-- PWA hookup -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#12181B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tally">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12181B;
+    --surface:#1B2226;
+    --surface-raised:#212A2F;
+    --hairline:#2C363B;
+    --ink:#EDEAE3;
+    --muted:#8B979D;
+    --gold:#D4A94B;
+    --gold-dim:#8A733A;
+    --danger:#E0806B;
+    --positive:#7FBF9E;
+    --radius:14px;
+    --font-display:'Fraunces', serif;
+    --font-body:'Inter', sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:0;
+    /* support notches/status bars when installed standalone */
+    padding-top:env(safe-area-inset-top);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .app-shell{
+    width:100%;
+    max-width:430px;
+    min-height:100vh;
+    background:var(--bg);
+    display:flex;
+    flex-direction:column;
+    position:relative;
+  }
+
+  /* Topbar */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:22px 20px 6px;
+  }
+  .brand{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:22px;
+    letter-spacing:0.02em;
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+  }
+  .brand .dot{color:var(--gold);}
+  .icon-btn{
+    width:38px; height:38px;
+    border-radius:50%;
+    border:1px solid var(--hairline);
+    background:var(--surface);
+    color:var(--muted);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .icon-btn:hover{border-color:var(--gold-dim); color:var(--gold);}
+  .icon-btn:focus-visible, button:focus-visible, input:focus-visible{
+    outline:2px solid var(--gold); outline-offset:2px;
+  }
+
+  /* Balance card */
+  .balance-card{
+    margin:14px 20px 8px;
+    padding:26px 22px 22px;
+    border-radius:20px;
+    background:linear-gradient(165deg, var(--surface-raised), var(--surface));
+    border:1px solid var(--hairline);
+    position:relative;
+    overflow:hidden;
+  }
+  .balance-label{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.12em;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  .balance-amount{
+    font-family:var(--font-mono);
+    font-size:44px;
+    font-weight:500;
+    letter-spacing:-0.01em;
+    line-height:1.1;
+  }
+  .balance-amount.negative{color:var(--danger);}
+  .balance-sub{
+    margin-top:14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    color:var(--muted);
+  }
+  .allowance-chip{
+    font-family:var(--font-mono);
+    color:var(--gold);
+    background:rgba(212,169,75,0.1);
+    border:1px solid rgba(212,169,75,0.3);
+    padding:3px 9px;
+    border-radius:100px;
+    font-size:12.5px;
+  }
+
+  /* Quick add */
+  .quick-add{
+    margin:14px 20px 4px;
+    padding:14px;
+    border-radius:16px;
+    background:var(--surface);
+    border:1px solid var(--hairline);
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .quick-add-row{display:flex; gap:8px;}
+  .field{
+    flex:1;
+    min-width:0;
+    width:100%;
+    background:var(--bg);
+    border:1px solid var(--hairline);
+    border-radius:10px;
+    padding:11px 12px;
+    color:var(--ink);
+    font-family:var(--font-body);
+    font-size:14.5px;
+  }
+  .field::placeholder{color:#5C666B;}
+  .field-amount{
+    flex:0 0 88px;
+    min-width:0;
+    width:88px;
+    padding:11px 8px;
+    font-family:var(--font-mono);
+  }
+  .add-btn{
+    background:var(--gold);
+    color:#1A1508;
+    border:none;
+    border-radius:10px;
+    padding:12px;
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:14.5px;
+    cursor:pointer;
+    transition:filter .15s ease, transform .05s ease;
+  }
+  .add-btn:hover{filter:brightness(1.08);}
+  .add-btn:active{transform:scale(0.98);}
+  .form-error{
+    font-size:12.5px;
+    color:var(--danger);
+    min-height:14px;
+  }
+
+  /* Ledger */
+  .ledger-wrap{
+    flex:1;
+    margin:18px 0 30px;
+    padding:0 20px;
+  }
+  .ledger-heading{
+    font-family:var(--font-display);
+    font-size:15px;
+    font-weight:600;
+    color:var(--muted);
+    letter-spacing:0.03em;
+    margin:0 2px 10px;
+  }
+  .day-group{margin-bottom:22px;}
+  .day-header{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.1em;
+    color:var(--muted);
+    margin:0 2px 8px;
+  }
+  .day-header::after{
+    content:'';
+    flex:1;
+    height:1px;
+    background:var(--hairline);
+  }
+  .tape{
+    background:var(--surface);
+    border:1px solid var(--hairline);
+    border-radius:14px;
+    overflow:hidden;
+  }
+  .entry{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 14px;
+    border-bottom:1px dashed var(--hairline);
+    gap:10px;
+    animation:slideIn .25s ease both;
+  }
+  .entry:last-child{border-bottom:none;}
+  .entry-left{display:flex; align-items:center; gap:10px; min-width:0;}
+  .entry-dot{
+    width:7px; height:7px; border-radius:50%;
+    flex:0 0 auto;
+  }
+  .entry-dot.credit{background:var(--gold);}
+  .entry-dot.purchase{background:var(--danger);}
+  .entry-text{min-width:0;}
+  .entry-desc{
+    font-size:14px;
+    color:var(--ink);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .entry-running{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--muted);
+    margin-top:1px;
+  }
+  .entry-right{
+    text-align:right;
+    flex:0 0 auto;
+  }
+  .entry-amount{
+    font-family:var(--font-mono);
+    font-size:14.5px;
+    font-weight:500;
+  }
+  .entry-amount.credit{color:var(--gold);}
+  .entry-amount.purchase{color:var(--danger);}
+  .entry-del{
+    background:none; border:none; color:#5C666B;
+    font-size:11px; cursor:pointer; padding:2px 0 0;
+    font-family:var(--font-body);
+  }
+  .entry-del:hover{color:var(--danger);}
+
+  @keyframes slideIn{
+    from{opacity:0; transform:translateY(4px);}
+    to{opacity:1; transform:translateY(0);}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .entry{animation:none;}
+  }
+
+  .empty-state{
+    text-align:center;
+    padding:40px 20px;
+    color:var(--muted);
+    font-size:14px;
+  }
+  .empty-state .glyph{
+    font-family:var(--font-display);
+    font-size:30px;
+    color:var(--gold-dim);
+    margin-bottom:8px;
+  }
+
+  /* Modal */
+  .modal-overlay{
+    position:fixed; inset:0;
+    background:rgba(10,13,15,0.6);
+    display:none;
+    align-items:flex-end;
+    justify-content:center;
+    z-index:50;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    width:100%;
+    max-width:430px;
+    background:var(--surface-raised);
+    border-top:1px solid var(--hairline);
+    border-radius:20px 20px 0 0;
+    padding:22px 20px 28px;
+    animation:riseUp .2s ease both;
+    padding-bottom:calc(28px + env(safe-area-inset-bottom));
+  }
+  @keyframes riseUp{ from{transform:translateY(30px); opacity:0;} to{transform:translateY(0); opacity:1;} }
+  .modal h2{
+    font-family:var(--font-display);
+    font-size:19px;
+    margin:0 0 16px;
+  }
+  .modal label{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    display:block;
+    margin-bottom:6px;
+  }
+  .modal .field{width:100%; margin-bottom:16px;}
+  .modal-actions{display:flex; gap:10px;}
+  .btn-secondary{
+    flex:1;
+    background:transparent;
+    border:1px solid var(--hairline);
+    color:var(--muted);
+    border-radius:10px;
+    padding:12px;
+    font-family:var(--font-body);
+    font-size:14px;
+    cursor:pointer;
+  }
+  .btn-secondary:hover{border-color:var(--danger); color:var(--danger);}
+  .btn-primary{
+    flex:1;
+    background:var(--gold);
+    border:none;
+    color:#1A1508;
+    border-radius:10px;
+    padding:12px;
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:14px;
+    cursor:pointer;
+  }
+  .modal-close{
+    position:absolute;
+    top:16px; right:18px;
+    background:none; border:none;
+    color:var(--muted);
+    font-size:20px;
+    cursor:pointer;
+  }
+  .modal{position:relative;}
+
+  .settings-divider{
+    height:1px;
+    background:var(--hairline);
+    margin:22px 0 18px;
+  }
+  .settings-note{
+    font-size:12.5px;
+    line-height:1.5;
+    color:var(--muted);
+    margin:0 0 16px;
+  }
+  .backup-status{
+    font-size:12px;
+    color:var(--gold);
+    margin-top:10px;
+    min-height:14px;
+  }
+  .backup-status.error{color:var(--danger);}
+
+  .loading-msg{
+    text-align:center; color:var(--muted);
+    padding:60px 20px; font-size:14px;
+  }
+
+  /* Tabs */
+  .tab-bar{
+    margin:14px 20px 0;
+    display:flex;
+    gap:4px;
+    padding:4px;
+    background:var(--surface);
+    border:1px solid var(--hairline);
+    border-radius:12px;
+  }
+  .tab-btn{
+    flex:1;
+    background:none;
+    border:none;
+    color:var(--muted);
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:13.5px;
+    padding:9px 0;
+    border-radius:9px;
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease;
+  }
+  .tab-btn.active{
+    background:var(--surface-raised);
+    color:var(--gold);
+  }
+
+  /* Charts */
+  .charts-wrap{
+    padding:16px 20px 30px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .period-selector{
+    display:flex;
+    gap:4px;
+    padding:4px;
+    background:var(--surface);
+    border:1px solid var(--hairline);
+    border-radius:12px;
+  }
+  .period-btn{
+    flex:1;
+    background:none;
+    border:none;
+    color:var(--muted);
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:12.5px;
+    padding:7px 0;
+    border-radius:9px;
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease;
+  }
+  .period-btn.active{
+    background:var(--surface-raised);
+    color:var(--gold);
+  }
+  .chart-card{
+    background:var(--surface);
+    border:1px solid var(--hairline);
+    border-radius:16px;
+    padding:16px 16px 10px;
+  }
+  .chart-header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:2px;
+  }
+  .chart-title{
+    font-family:var(--font-display);
+    font-size:15px;
+    font-weight:600;
+    color:var(--ink);
+  }
+  .chart-range{
+    font-size:11.5px;
+    color:var(--muted);
+    font-family:var(--font-mono);
+  }
+  .chart-svg{
+    width:100%;
+    height:auto;
+    display:block;
+    margin-top:6px;
+  }
+  .chart-legend{
+    display:flex;
+    gap:14px;
+    margin-top:4px;
+    font-size:11.5px;
+    color:var(--muted);
+  }
+  .chart-legend span{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+  }
+  .legend-dot{
+    width:8px; height:8px; border-radius:50%;
+    display:inline-block;
+  }
+
+  .install-banner{
+    display:none;
+    margin:14px 20px 0;
+    padding:12px 14px;
+    border-radius:12px;
+    background:rgba(212,169,75,0.08);
+    border:1px solid rgba(212,169,75,0.28);
+    font-size:13px;
+    color:var(--ink);
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .install-banner.show{display:flex;}
+  .install-banner button{
+    background:var(--gold);
+    color:#1A1508;
+    border:none;
+    border-radius:8px;
+    padding:7px 12px;
+    font-size:12.5px;
+    font-weight:600;
+    cursor:pointer;
+    flex:0 0 auto;
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <div class="brand">Tally<span class="dot">.</span></div>
+    <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    </button>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn" id="tabLedgerBtn">Ledger</button>
+    <button class="tab-btn" id="tabChartsBtn">Charts</button>
+  </div>
+
+  <div class="install-banner" id="installBanner">
+    <span>Install Tally on your home screen for the full app experience.</span>
+    <button id="installBtn">Install</button>
+  </div>
+
+  <div class="install-banner" id="backupBanner">
+    <span id="backupBannerText">Back up your data so it's never lost.</span>
+    <button id="backupBannerBtn">Back up</button>
+  </div>
+
+  <div id="content">
+    <div class="loading-msg">Opening the ledger…</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal">
+    <button class="modal-close" id="closeSettings" aria-label="Close">&times;</button>
+    <h2>Settings</h2>
+    <label for="dailyAmountInput">Daily allowance</label>
+    <input type="number" step="0.01" min="0" class="field" id="dailyAmountInput" placeholder="20.00">
+    <div class="modal-actions">
+      <button class="btn-secondary" id="resetBtn">Reset all data</button>
+      <button class="btn-primary" id="saveSettingsBtn">Save</button>
+    </div>
+
+    <div class="settings-divider"></div>
+
+    <h2>Backup &amp; restore</h2>
+    <p class="settings-note">
+      Your data lives only in this browser on this device — it can be lost if you clear site
+      data, switch browsers, or reinstall the app. Export a backup regularly and keep the file
+      somewhere safe.
+    </p>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="importBtn">Import backup</button>
+      <button class="btn-primary" id="exportBtn">Export backup</button>
+    </div>
+    <div class="backup-status" id="backupStatus"></div>
+    <input type="file" id="importFileInput" accept="application/json" style="display:none">
+  </div>
+</div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'tally-state';
+  const content = document.getElementById('content');
+  let state = null;
+  let activeTab = 'ledger';
+  let chartPeriod = 'month'; // 'week' | 'month' | 'all'
+
+  // ---------- Storage (localStorage, persists on-device) ----------
+  const localStore = {
+    get(key){
+      const raw = window.localStorage.getItem(key);
+      return raw ? { value: raw } : null;
+    },
+    set(key, value){
+      window.localStorage.setItem(key, value);
+      return { key, value };
+    }
+  };
+
+  function todayKey(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+  function dateKeyToDate(key){
+    const [y,m,d] = key.split('-').map(Number);
+    return new Date(y, m-1, d);
+  }
+  function daysBetween(keyA, keyB){
+    const a = dateKeyToDate(keyA), b = dateKeyToDate(keyB);
+    return Math.round((b - a) / 86400000);
+  }
+  function fmtMoney(n){
+    const sign = n < 0 ? '-' : '';
+    return sign + '$' + Math.abs(n).toFixed(2);
+  }
+  function fmtDayHeader(key){
+    const d = dateKeyToDate(key);
+    const today = todayKey();
+    const yesterday = (function(){ const t = new Date(); t.setDate(t.getDate()-1); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); })();
+    if(key === today) return 'Today';
+    if(key === yesterday) return 'Yesterday';
+    return d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+  }
+
+  function defaultState(){
+    const t = todayKey();
+    return {
+      dailyAmount: 20,
+      balance: 20,
+      lastAddedDate: t,
+      entries: [
+        { id: cryptoId(), type:'credit', desc:'Daily allowance', amount:20, date:t, running:20 }
+      ]
+    };
+  }
+  function cryptoId(){
+    return Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  }
+
+  function loadState(){
+    try{
+      const res = localStore.get(STORAGE_KEY);
+      if(res && res.value){
+        state = JSON.parse(res.value);
+      } else {
+        state = defaultState();
+        persist();
+      }
+    }catch(e){
+      state = defaultState();
+      persist();
+    }
+    applyDailyCredits();
+    render();
+  }
+
+  function persist(){
+    try{
+      localStore.set(STORAGE_KEY, JSON.stringify(state));
+    }catch(e){
+      console.error('Could not save', e);
+    }
+    if(typeof updateBackupBanner === 'function'){ updateBackupBanner(); }
+  }
+
+  function applyDailyCredits(){
+    const today = todayKey();
+    let diff = daysBetween(state.lastAddedDate, today);
+    if(diff <= 0) return;
+    diff = Math.min(diff, 60);
+    let cursor = state.lastAddedDate;
+    for(let i=0;i<diff;i++){
+      const d = dateKeyToDate(cursor);
+      d.setDate(d.getDate()+1);
+      const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      state.balance += state.dailyAmount;
+      state.entries.push({
+        id: cryptoId(), type:'credit', desc:'Daily allowance', amount:state.dailyAmount, date:key, running: round2(state.balance)
+      });
+      cursor = key;
+    }
+    state.lastAddedDate = today;
+    persist();
+  }
+
+  function round2(n){ return Math.round(n*100)/100; }
+
+  function groupByDate(entries){
+    const map = new Map();
+    const sorted = [...entries].sort((a,b) => {
+      if(a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return 0;
+    });
+    for(const e of sorted){
+      if(!map.has(e.date)) map.set(e.date, []);
+      map.get(e.date).push(e);
+    }
+    return map;
+  }
+
+  function render(){
+    const ledgerTabBtn = document.getElementById('tabLedgerBtn');
+    const chartsTabBtn = document.getElementById('tabChartsBtn');
+    if(ledgerTabBtn) ledgerTabBtn.classList.toggle('active', activeTab === 'ledger');
+    if(chartsTabBtn) chartsTabBtn.classList.toggle('active', activeTab === 'charts');
+    if(activeTab === 'charts'){
+      renderChartsView();
+    } else {
+      renderLedgerView();
+    }
+  }
+
+  function renderLedgerView(){
+    const balance = round2(state.balance);
+    const groups = groupByDate(state.entries);
+
+    let ledgerHtml = '';
+    if(state.entries.length === 0){
+      ledgerHtml = `<div class="empty-state"><div class="glyph">—</div>Nothing logged yet. Add your first purchase below.</div>`;
+    } else {
+      for(const [dateKey, entries] of groups){
+        const rows = [...entries].reverse().map(e => `
+          <div class="entry">
+            <div class="entry-left">
+              <div class="entry-dot ${e.type}"></div>
+              <div class="entry-text">
+                <div class="entry-desc">${escapeHtml(e.desc)}</div>
+                <div class="entry-running">balance ${fmtMoney(e.running)}</div>
+              </div>
+            </div>
+            <div class="entry-right">
+              <div class="entry-amount ${e.type}">${e.type === 'credit' ? '+' : '-'}${fmtMoney(Math.abs(e.amount))}</div>
+              <button class="entry-del" data-id="${e.id}" aria-label="Delete entry">remove</button>
+            </div>
+          </div>
+        `).join('');
+        ledgerHtml += `
+          <div class="day-group">
+            <div class="day-header">${fmtDayHeader(dateKey)}</div>
+            <div class="tape">${rows}</div>
+          </div>
+        `;
+      }
+    }
+
+    content.innerHTML = `
+      <div class="balance-card">
+        <div class="balance-label">Available to spend</div>
+        <div class="balance-amount ${balance < 0 ? 'negative' : ''}" id="balanceAmount">${fmtMoney(balance)}</div>
+        <div class="balance-sub">
+          <span class="allowance-chip">+${fmtMoney(state.dailyAmount)} / day</span>
+          <span>added automatically</span>
+        </div>
+      </div>
+
+      <div class="quick-add">
+        <div class="quick-add-row">
+          <input class="field" id="descInput" type="text" placeholder="What did you buy?" maxlength="60">
+          <input class="field field-amount" id="amountInput" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00">
+        </div>
+        <div class="form-error" id="formError"></div>
+        <button class="add-btn" id="addBtn">Log purchase</button>
+      </div>
+
+      <div class="ledger-wrap">
+        <div class="ledger-heading">Ledger</div>
+        ${ledgerHtml}
+      </div>
+    `;
+
+    document.getElementById('addBtn').addEventListener('click', handleAdd);
+    document.getElementById('amountInput').addEventListener('keydown', e => { if(e.key === 'Enter') handleAdd(); });
+    document.getElementById('descInput').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('amountInput').focus(); });
+    content.querySelectorAll('.entry-del').forEach(btn => {
+      btn.addEventListener('click', () => deleteEntry(btn.getAttribute('data-id')));
+    });
+  }
+
+  // ---------- Charts ----------
+  function fmtShortDate(key){
+    const d = dateKeyToDate(key);
+    return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  }
+
+  function buildDailySeries(){
+    const byDate = new Map();
+    for(const e of state.entries){
+      if(!byDate.has(e.date)) byDate.set(e.date, { spend:0, lastRunning:e.running });
+      const rec = byDate.get(e.date);
+      if(e.type === 'purchase') rec.spend = round2(rec.spend + e.amount);
+      rec.lastRunning = e.running;
+    }
+    const dates = Array.from(byDate.keys()).sort();
+    return dates.map(d => ({ date:d, spend: byDate.get(d).spend, balance: byDate.get(d).lastRunning }));
+  }
+
+  function buildLineChart(series, valueKey, color, options){
+    options = options || {};
+    const W = 300, H = 150, padL = 42, padR = 10, padT = 14, padB = 22;
+    const edgeInset = 12; // keeps first/last points off the chart's left/right edge
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const plotW = innerW - edgeInset * 2;
+    const n = series.length;
+    const values = series.map(p => p[valueKey]);
+    if(options.referenceLine){ values.push(options.referenceLine.value); }
+    let minV = Math.min(...values, 0);
+    let maxV = Math.max(...values);
+    if(options.zeroLine){ maxV = Math.max(maxV, 0); } // guarantee $0 is inside the range on both ends
+    if(minV === maxV){ minV -= 1; maxV += 1; }
+    const pad = (maxV - minV) * 0.12 || 1;
+    minV -= pad; maxV += pad;
+    if(options.clampMinZero){ minV = Math.max(minV, 0); }
+
+    const xFor = i => n <= 1 ? padL + innerW / 2 : padL + edgeInset + (plotW * i / (n - 1));
+    const yFor = v => padT + innerH - ((v - minV) / (maxV - minV)) * innerH;
+    const points = series.map((p, i) => [xFor(i), yFor(p[valueKey])]);
+
+    const pathD = points.map((pt, i) => (i === 0 ? 'M' : 'L') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1)).join(' ');
+    const baselineY = (padT + innerH).toFixed(1);
+    const areaD = `${pathD} L${points[points.length - 1][0].toFixed(1)},${baselineY} L${points[0][0].toFixed(1)},${baselineY} Z`;
+
+    const range = maxV - minV;
+    const gridVals = [minV, (minV + maxV) / 2, maxV]
+      .filter(v => !(options.zeroLine && Math.abs(v) < range * 0.04)); // avoid a duplicate label right on top of the $0 line
+    const gridLines = gridVals.map(v => {
+      const y = yFor(v).toFixed(1);
+      return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--hairline)" stroke-width="1" stroke-dasharray="2,3"/>
+        <text x="${padL - 6}" y="${(parseFloat(y) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">${fmtMoney(v)}</text>`;
+    }).join('');
+
+    let zeroLineSvg = '';
+    if(options.zeroLine){
+      const zeroY = yFor(0).toFixed(1);
+      zeroLineSvg = `
+        <line x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" stroke="var(--muted)" stroke-width="1.4"/>
+        <text x="${padL - 6}" y="${(parseFloat(zeroY) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">$0</text>`;
+    }
+
+    let referenceLineSvg = '';
+    if(options.referenceLine){
+      const refY = yFor(options.referenceLine.value).toFixed(1);
+      referenceLineSvg = `
+        <line x1="${padL}" y1="${refY}" x2="${W - padR}" y2="${refY}" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="5,4"/>
+        <text x="${W - padR}" y="${(parseFloat(refY) - 4).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">${options.referenceLine.label}</text>`;
+    }
+
+    const dots = points.length <= 25
+      ? points.map(pt => `<circle cx="${pt[0].toFixed(1)}" cy="${pt[1].toFixed(1)}" r="2.4" fill="${color}"/>`).join('')
+      : '';
+
+    const firstLabel = fmtShortDate(series[0].date);
+    const lastLabel = n > 1 ? fmtShortDate(series[n - 1].date) : '';
+
+    return `
+      <svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Line chart">
+        ${gridLines}
+        ${zeroLineSvg}
+        ${referenceLineSvg}
+        <path d="${areaD}" fill="${color}" opacity="0.1" stroke="none"/>
+        <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        ${dots}
+        <text x="${padL}" y="${H - 4}" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">${firstLabel}</text>
+        <text x="${W - padR}" y="${H - 4}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">${lastLabel}</text>
+      </svg>`;
+  }
+
+  function renderChartsView(){
+    const series = buildDailySeries();
+
+    if(series.length === 0){
+      content.innerHTML = `
+        <div class="charts-wrap">
+          <div class="empty-state"><div class="glyph">—</div>Log a few days of activity to see your charts.</div>
+        </div>`;
+      return;
+    }
+
+    const periods = [
+      { key: 'week', label: 'Week', days: 7 },
+      { key: 'month', label: 'Month', days: 30 },
+      { key: 'all', label: 'All time', days: null }
+    ];
+    const activePeriod = periods.find(p => p.key === chartPeriod) || periods[1];
+    const trimmed = activePeriod.days ? series.slice(-activePeriod.days) : series;
+    const rangeLabel = trimmed.length + (trimmed.length === 1 ? ' day' : ' days');
+
+    const periodButtonsHtml = periods.map(p => `
+      <button class="period-btn ${p.key === chartPeriod ? 'active' : ''}" data-period="${p.key}">${p.label}</button>
+    `).join('');
+
+    const balanceChart = buildLineChart(trimmed, 'balance', 'var(--gold)', { zeroLine: true });
+    const spendChart = buildLineChart(trimmed, 'spend', 'var(--danger)', {
+      referenceLine: { value: state.dailyAmount, label: `Budget ${fmtMoney(state.dailyAmount)}` },
+      clampMinZero: true
+    });
+
+    content.innerHTML = `
+      <div class="charts-wrap">
+        <div class="period-selector">${periodButtonsHtml}</div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Balance over time</div>
+            <div class="chart-range">${rangeLabel}</div>
+          </div>
+          ${balanceChart}
+          <div class="chart-legend"><span><span class="legend-dot" style="background:var(--gold)"></span>End-of-day balance</span></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Daily spending</div>
+            <div class="chart-range">${rangeLabel}</div>
+          </div>
+          ${spendChart}
+          <div class="chart-legend">
+            <span><span class="legend-dot" style="background:var(--danger)"></span>Purchases per day</span>
+            <span><span class="legend-dot" style="background:var(--muted)"></span>Daily budget</span>
+          </div>
+        </div>
+      </div>`;
+
+    content.querySelectorAll('.period-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-period');
+        if(key === chartPeriod) return;
+        chartPeriod = key;
+        renderChartsView();
+      });
+    });
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function handleAdd(){
+    const descEl = document.getElementById('descInput');
+    const amountEl = document.getElementById('amountInput');
+    const errEl = document.getElementById('formError');
+    const desc = descEl.value.trim();
+    const amount = parseFloat(amountEl.value);
+
+    if(!desc){ errEl.textContent = 'Add a short description.'; descEl.focus(); return; }
+    if(isNaN(amount) || amount <= 0){ errEl.textContent = 'Enter an amount greater than 0.'; amountEl.focus(); return; }
+    errEl.textContent = '';
+
+    state.balance = round2(state.balance - amount);
+    state.entries.push({
+      id: cryptoId(), type:'purchase', desc, amount, date: todayKey(), running: state.balance
+    });
+    persist();
+    render();
+  }
+
+  function deleteEntry(id){
+    const idx = state.entries.findIndex(e => e.id === id);
+    if(idx === -1) return;
+    state.entries.splice(idx, 1);
+    recomputeRunningBalances();
+    persist();
+    render();
+  }
+
+  function recomputeRunningBalances(){
+    const chronological = [...state.entries].sort((a,b) => {
+      if(a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return 0;
+    });
+    let running = 0;
+    for(const e of chronological){
+      running = round2(running + (e.type === 'credit' ? e.amount : -e.amount));
+      e.running = running;
+    }
+    state.balance = running;
+  }
+
+  // Tab bar
+  document.getElementById('tabLedgerBtn').addEventListener('click', () => {
+    if(activeTab === 'ledger') return;
+    activeTab = 'ledger';
+    render();
+  });
+  document.getElementById('tabChartsBtn').addEventListener('click', () => {
+    if(activeTab === 'charts') return;
+    activeTab = 'charts';
+    render();
+  });
+
+  // Settings modal
+  const overlay = document.getElementById('settingsOverlay');
+  const LAST_BACKUP_KEY = 'tally-last-backup';
+  const backupStatus = document.getElementById('backupStatus');
+
+  function describeLastBackup(){
+    const raw = window.localStorage.getItem(LAST_BACKUP_KEY);
+    if(!raw) return 'No backup yet — export one to keep your data safe.';
+    const d = new Date(raw);
+    return 'Last backup: ' + d.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) + ' at ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+  }
+
+  document.getElementById('settingsBtn').addEventListener('click', () => {
+    document.getElementById('dailyAmountInput').value = state.dailyAmount;
+    backupStatus.textContent = describeLastBackup();
+    backupStatus.classList.remove('error');
+    overlay.classList.add('open');
+  });
+  document.getElementById('closeSettings').addEventListener('click', () => overlay.classList.remove('open'));
+  overlay.addEventListener('click', (e) => { if(e.target === overlay) overlay.classList.remove('open'); });
+  document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+    const val = parseFloat(document.getElementById('dailyAmountInput').value);
+    if(!isNaN(val) && val >= 0){
+      state.dailyAmount = round2(val);
+      persist();
+      render();
+    }
+    overlay.classList.remove('open');
+  });
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if(confirm('Reset all budget data? This cannot be undone. Export a backup first if you want to keep it.')){
+      state = defaultState();
+      persist();
+      render();
+      overlay.classList.remove('open');
+    }
+  });
+
+  // ---------- Backup (export) ----------
+  function exportBackup(){
+    try{
+      const payload = {
+        app: 'tally',
+        exportedAt: new Date().toISOString(),
+        state
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = todayKey();
+      a.href = url;
+      a.download = `tally-backup-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      window.localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
+      backupStatus.textContent = 'Backup saved to your downloads.';
+      backupStatus.classList.remove('error');
+      updateBackupBanner();
+      return true;
+    }catch(e){
+      backupStatus.textContent = 'Could not create backup file.';
+      backupStatus.classList.add('error');
+      return false;
+    }
+  }
+  document.getElementById('exportBtn').addEventListener('click', exportBackup);
+
+  // ---------- Restore (import) ----------
+  const importFileInput = document.getElementById('importFileInput');
+  document.getElementById('importBtn').addEventListener('click', () => {
+    importFileInput.value = '';
+    importFileInput.click();
+  });
+  importFileInput.addEventListener('change', () => {
+    const file = importFileInput.files && importFileInput.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const parsed = JSON.parse(reader.result);
+        const incoming = parsed && parsed.state ? parsed.state : parsed; // support raw state or wrapped payload
+        if(!incoming || typeof incoming.dailyAmount !== 'number' || !Array.isArray(incoming.entries)){
+          throw new Error('Unrecognized backup format');
+        }
+        if(!confirm('Import this backup? It will replace all data currently in the app.')){
+          return;
+        }
+        state = incoming;
+        recomputeRunningBalances();
+        applyDailyCredits();
+        persist();
+        render();
+        backupStatus.textContent = 'Backup restored successfully.';
+        backupStatus.classList.remove('error');
+      }catch(e){
+        backupStatus.textContent = 'That file doesn\'t look like a valid Tally backup.';
+        backupStatus.classList.add('error');
+      }
+    };
+    reader.onerror = () => {
+      backupStatus.textContent = 'Could not read that file.';
+      backupStatus.classList.add('error');
+    };
+    reader.readAsText(file);
+  });
+
+  // ---------- Backup reminder banner ----------
+  const backupBanner = document.getElementById('backupBanner');
+  const backupBannerText = document.getElementById('backupBannerText');
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function updateBackupBanner(){
+    if(!state || state.entries.length < 3){
+      backupBanner.classList.remove('show');
+      return;
+    }
+    const raw = window.localStorage.getItem(LAST_BACKUP_KEY);
+    if(!raw){
+      backupBannerText.textContent = "You haven't backed up your data yet — export it so it's never lost.";
+      backupBanner.classList.add('show');
+      return;
+    }
+    const last = new Date(raw).getTime();
+    if(Date.now() - last > SEVEN_DAYS_MS){
+      backupBannerText.textContent = "It's been a while since your last backup — export a fresh copy.";
+      backupBanner.classList.add('show');
+    } else {
+      backupBanner.classList.remove('show');
+    }
+  }
+
+  document.getElementById('backupBannerBtn').addEventListener('click', exportBackup);
+
+  loadState();
+  updateBackupBanner();
+
+  // ---------- PWA install prompt ----------
+  let deferredPrompt = null;
+  const installBanner = document.getElementById('installBanner');
+  const installBtn = document.getElementById('installBtn');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBanner.classList.add('show');
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if(!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    installBanner.classList.remove('show');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installBanner.classList.remove('show');
+  });
+
+  // ---------- Service worker registration ----------
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch(err => {
+        console.warn('Service worker registration failed', err);
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
