@@ -802,7 +802,9 @@
     const n = series.length;
     const values = series.map(p => p[valueKey]);
     if(options.referenceLine){ values.push(options.referenceLine.value); }
-    let minV = Math.min(...values, 0), maxV = Math.max(...values);
+    let minV = Math.min(...values, 0);
+    let maxV = Math.max(...values);
+    if(options.zeroLine){ maxV = Math.max(maxV, 0); } // guarantee $0 is inside the range on both ends
     if(minV === maxV){ minV -= 1; maxV += 1; }
     const pad = (maxV - minV) * 0.12 || 1;
     minV -= pad; maxV += pad;
@@ -816,12 +818,22 @@
     const baselineY = (padT + innerH).toFixed(1);
     const areaD = `${pathD} L${points[points.length - 1][0].toFixed(1)},${baselineY} L${points[0][0].toFixed(1)},${baselineY} Z`;
 
-    const gridVals = [minV, (minV + maxV) / 2, maxV];
+    const range = maxV - minV;
+    const gridVals = [minV, (minV + maxV) / 2, maxV]
+      .filter(v => !(options.zeroLine && Math.abs(v) < range * 0.04)); // avoid a duplicate label right on top of the $0 line
     const gridLines = gridVals.map(v => {
       const y = yFor(v).toFixed(1);
       return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--hairline)" stroke-width="1" stroke-dasharray="2,3"/>
         <text x="${padL - 6}" y="${(parseFloat(y) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">${fmtMoney(v)}</text>`;
     }).join('');
+
+    let zeroLineSvg = '';
+    if(options.zeroLine){
+      const zeroY = yFor(0).toFixed(1);
+      zeroLineSvg = `
+        <line x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" stroke="var(--muted)" stroke-width="1.4"/>
+        <text x="${padL - 6}" y="${(parseFloat(zeroY) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--font-mono)">$0</text>`;
+    }
 
     let referenceLineSvg = '';
     if(options.referenceLine){
@@ -841,6 +853,7 @@
     return `
       <svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Line chart">
         ${gridLines}
+        ${zeroLineSvg}
         ${referenceLineSvg}
         <path d="${areaD}" fill="${color}" opacity="0.1" stroke="none"/>
         <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
@@ -874,7 +887,7 @@
       <button class="period-btn ${p.key === chartPeriod ? 'active' : ''}" data-period="${p.key}">${p.label}</button>
     `).join('');
 
-    const balanceChart = buildLineChart(trimmed, 'balance', 'var(--gold)');
+    const balanceChart = buildLineChart(trimmed, 'balance', 'var(--gold)', { zeroLine: true });
     const spendChart = buildLineChart(trimmed, 'spend', 'var(--danger)', {
       referenceLine: { value: state.dailyAmount, label: `Budget ${fmtMoney(state.dailyAmount)}` },
       clampMinZero: true
